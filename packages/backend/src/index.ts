@@ -5,6 +5,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { logger } from './utils/logger';
+import { pool } from './config/database';
+import { AgentRegistry, AgentContext } from './agents';
 
 // Load environment variables
 dotenv.config();
@@ -18,6 +20,20 @@ const io = new Server(httpServer, {
   }
 });
 
+// Initialize Agent Registry
+const agentRegistry = new AgentRegistry();
+
+// Create agent context
+const agentContext: AgentContext = {
+  db: pool,
+  io,
+  registry: agentRegistry,
+  projectWorkspace: process.env.PROJECT_WORKSPACE || '/workspaces'
+};
+
+// Export for use in other modules
+export { agentContext, agentRegistry };
+
 // Middleware
 app.use(helmet());
 app.use(cors({
@@ -29,10 +45,67 @@ app.use(express.urlencoded({ extended: true }));
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    agents: agentRegistry.getStats()
+  });
 });
 
-// Socket.io connection handling
+// Socket.io Namespaces for Agent Communication
+const agentNamespace = io.of('/agents');
+const projectNamespace = io.of('/projects');
+
+// Agent namespace for inter-agent communication
+agentNamespace.on('connection', (socket) => {
+  logger.info(`Agent connected to namespace: ${socket.id}`);
+  
+  // Agent registration
+  socket.on('register', (data: { agentId: string; role: string }) => {
+    socket.join(`agent:${data.agentId}`);
+    logger.info(`Agent ${data.agentId} registered with role ${data.role}`);
+  });
+  
+  // Inter-agent messaging
+  socket.on('agent_message', (message: any) => {
+    agentNamespace.to(`agent:${message.to}`).emit('message', message);
+  });
+  
+  socket.on('disconnect', () => {
+    logger.info(`Agent disconnected from namespace: ${socket.id}`);
+  });
+});
+
+// Project namespace for UI updates
+projectNamespace.on('connection', (socket) => {
+  logger.info(`Client connected to project namespace: ${socket.id}`);
+  
+  // Join project room
+  socket.on('join_project', (projectId: string) => {
+    socket.join(`project:${projectId}`);
+    logger.info(`Client ${socket.id} joined project ${projectId}`);
+    
+    // Send current project agents
+    const projectAgents = agentRegistry.getAgentsByProject(projectId);
+    socket.emit('project_agents', projectAgents.map(agent => ({
+      id: agent.id,
+      role: agent.role,
+      status: agent.status
+    })));
+  });
+  
+  // Leave project room
+  socket.on('leave_project', (projectId: string) => {
+    socket.leave(`project:${projectId}`);
+    logger.info(`Client ${socket.id} left project ${projectId}`);
+  });
+  
+  socket.on('disconnect', () => {
+    logger.info(`Client disconnected from project namespace: ${socket.id}`);
+  });
+});
+
+// Main Socket.io connection handling (for backward compatibility)
 io.on('connection', (socket) => {
   logger.info(`Client connected: ${socket.id}`);
   
@@ -41,17 +114,54 @@ io.on('connection', (socket) => {
   });
 });
 
+// API Routes (placeholder for future implementation)
+app.use('/api/projects', (req, res) => {
+  res.json({ message: 'Projects API - To be implemented' });
+});
+
+app.use('/api/agents', (req, res) => {
+  res.json({ 
+    message: 'Agents API',
+    stats: agentRegistry.getStats()
+  });
+});
+
 // Start server
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => {
   logger.info(`Helios backend server running on port ${PORT}`);
+  logger.info(`Agent Registry initialized with ${Object.keys(agentRegistry.getStats().agentsByRole).length} agent roles`);
 });
 
 // Graceful shutdown
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   logger.info('SIGTERM received, shutting down gracefully');
+  
+  // Shutdown all agents
+  const allAgents = agentRegistry.getAllAgents();
+  logger.info(`Shutting down ${allAgents.length} active agents`);
+  
+  await Promise.all(allAgents.map(agent => agent.shutdown()));
+  
+  // Clear registry
+  agentRegistry.clear();
+  
+  // Close database connection
+  await pool.end();
+  
+  // Close HTTP server
   httpServer.close(() => {
     logger.info('Server closed');
     process.exit(0);
   });
+});
+
+// Handle uncaught errors
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', error);
+  process.exit(1);
 });
