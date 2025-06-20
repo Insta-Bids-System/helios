@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { logger } from './utils/logger';
 import { pool } from './config/database';
 import { AgentRegistry, AgentContext } from './agents';
+import routes from './routes';
 
 // Load environment variables
 dotenv.config();
@@ -20,16 +21,28 @@ const io = new Server(httpServer, {
   }
 });
 
+// Update agent context with io
+agentContext.io = io;
+
 // Initialize Agent Registry
 const agentRegistry = new AgentRegistry();
 
 // Create agent context
 const agentContext: AgentContext = {
   db: pool,
-  io,
-  registry: agentRegistry,
-  projectWorkspace: process.env.PROJECT_WORKSPACE || '/workspaces'
+  io: null as any, // Will be set after io is created
+  logger,
+  config: {
+    maxRetries: 3,
+    retryDelay: 1000,
+    timeout: 30000,
+    logLevel: 'info'
+  }
 };
+
+// Store context and registry on app for access in routes
+(app as any).agentContext = agentContext;
+(app as any).agentRegistry = agentRegistry;
 
 // Export for use in other modules
 export { agentContext, agentRegistry };
@@ -48,7 +61,7 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'healthy', 
     timestamp: new Date().toISOString(),
-    agents: agentRegistry.getStats()
+    agents: agentRegistry.getStatistics()
   });
 });
 
@@ -114,23 +127,14 @@ io.on('connection', (socket) => {
   });
 });
 
-// API Routes (placeholder for future implementation)
-app.use('/api/projects', (req, res) => {
-  res.json({ message: 'Projects API - To be implemented' });
-});
-
-app.use('/api/agents', (req, res) => {
-  res.json({ 
-    message: 'Agents API',
-    stats: agentRegistry.getStats()
-  });
-});
+// API Routes
+app.use('/api', routes);
 
 // Start server
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => {
   logger.info(`Helios backend server running on port ${PORT}`);
-  logger.info(`Agent Registry initialized with ${Object.keys(agentRegistry.getStats().agentsByRole).length} agent roles`);
+  logger.info(`Agent Registry initialized with ${Object.keys(agentRegistry.getStatistics().agentsByRole).length} agent roles`);
 });
 
 // Graceful shutdown

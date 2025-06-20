@@ -10,6 +10,21 @@ export { AgentRegistry } from './AgentRegistry';
 // Export handoff tool creator
 export { createHandoffTool } from './handoffTools';
 
+// Export the Orchestrator Agent
+export { OrchestratorAgent } from './OrchestratorAgent';
+
+// Export placeholder agents
+export {
+  ProductManagerAgent,
+  FrontendEngineerAgent,
+  BackendEngineerAgent,
+  FullstackEngineerAgent,
+  DevOpsEngineerAgent,
+  QAEngineerAgent,
+  CodeReviewerAgent,
+  IntegrationSpecialistAgent
+} from './PlaceholderAgents';
+
 // Re-export commonly used types for convenience
 export type {
   IAgent,
@@ -18,14 +33,11 @@ export type {
   HeliosSwarmState,
   Task,
   Artifact,
-  Project,
   AgentConfig,
-  AgentContext,
-  ValidationResult
+  AgentContext
 } from './types';
 
 export {
   AgentRole,
-  AgentStatus,
-  MessageType
+  AgentStatus
 } from './types';
