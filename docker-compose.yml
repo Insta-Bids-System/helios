@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  backend:
+    container_name: helios-backend
+    build:
+      context: ./packages/backend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://helios:helios123@postgres:5432/helios_db
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - ./packages/backend:/app
+      - /app/node_modules
+      - ./workspaces:/workspaces
+    depends_on:
+      - postgres
+      - redis
+    command: npm run dev
+
+  postgres:
+    container_name: helios-postgres
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: helios
+      POSTGRES_PASSWORD: helios123
+      POSTGRES_DB: helios_db
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./packages/backend/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  redis:
+    container_name: helios-redis
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+  frontend:
+    container_name: helios-frontend
+    build:
+      context: ./packages/frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:3000
+    volumes:
+      - ./packages/frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  postgres-data:
+  redis-data:

@@ -1,0 +1,31 @@
+{
+  "name": "helios",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Helios Generative Agent Swarm - A multi-agent system for autonomous software development",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "npm --workspace=@helios/backend run dev",
+    "dev:frontend": "npm --workspace=@helios/frontend run dev",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "npm --workspace=@helios/backend run build",
+    "build:frontend": "npm --workspace=@helios/frontend run build",
+    "start": "npm --workspace=@helios/backend run start",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "npm --workspace=@helios/backend run test",
+    "test:frontend": "npm --workspace=@helios/frontend run test",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
