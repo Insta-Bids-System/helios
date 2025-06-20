@@ -1,52 +1,148 @@
-/**
- * Agent System Type Definitions
- * Core interfaces and types for the Helios multi-agent system
- */
-
-import { Pool } from 'pg';
-import { Server as SocketIOServer } from 'socket.io';
+import { Socket } from 'socket.io';
 
 /**
- * Agent roles within the Helios system
+ * Enum defining all agent roles in the Helios swarm
  */
 export enum AgentRole {
-  ORCHESTRATOR = 'ORCHESTRATOR',
-  PROJECT_ANALYZER = 'PROJECT_ANALYZER',
-  TASK_DECOMPOSER = 'TASK_DECOMPOSER',
-  PRODUCT_MANAGER = 'PRODUCT_MANAGER',
-  BACKEND_ENGINEER = 'BACKEND_ENGINEER',
-  FRONTEND_ENGINEER = 'FRONTEND_ENGINEER',
-  QA_ENGINEER = 'QA_ENGINEER',
-  DEVOPS_ENGINEER = 'DEVOPS_ENGINEER',
-  DOCUMENTATION_WRITER = 'DOCUMENTATION_WRITER'
+  ORCHESTRATOR = 'orchestrator',
+  PRODUCT_MANAGER = 'product_manager',
+  FRONTEND_ENGINEER = 'frontend_engineer',
+  BACKEND_ENGINEER = 'backend_engineer',
+  FULLSTACK_ENGINEER = 'fullstack_engineer',
+  DEVOPS_ENGINEER = 'devops_engineer',
+  QA_ENGINEER = 'qa_engineer',
+  CODE_REVIEWER = 'code_reviewer',
+  INTEGRATION_SPECIALIST = 'integration_specialist'
 }
 
 /**
- * Agent status states
+ * Agent status enum
  */
 export enum AgentStatus {
-  IDLE = 'IDLE',
-  EXECUTING = 'EXECUTING',
-  WAITING = 'WAITING',
-  ERROR = 'ERROR',
-  COMPLETED = 'COMPLETED'
+  IDLE = 'idle',
+  EXECUTING = 'executing',
+  WAITING = 'waiting',
+  ERROR = 'error',
+  COMPLETED = 'completed'
 }
 
 /**
- * Message types for inter-agent communication
+ * Central state object shared across all agents
  */
-export enum MessageType {
-  TASK_REQUEST = 'TASK_REQUEST',
-  TASK_RESPONSE = 'TASK_RESPONSE',
-  HANDOFF = 'HANDOFF',
-  STATUS_UPDATE = 'STATUS_UPDATE',
-  ERROR_REPORT = 'ERROR_REPORT',
-  VALIDATION_REQUEST = 'VALIDATION_REQUEST',
-  VALIDATION_RESPONSE = 'VALIDATION_RESPONSE'
+export interface HeliosSwarmState {
+  // Project information
+  projectId: string;
+  projectName: string;
+  projectDescription: string;
+  
+  // Current execution state
+  active_agent: AgentRole | null;
+  messages: AgentMessage[];
+  
+  // Task management
+  tasks: Task[];
+  currentTaskId: string | null;
+  taskDependencies: Map<string, string[]>;
+  
+  // Artifacts and outputs
+  artifacts: Map<string, Artifact>;
+  
+  // Agent-specific states
+  agentStates: Map<AgentRole, any>;
+  
+  // Error tracking
+  errors: Error[];
+  
+  // Metadata
+  createdAt: Date;
+  updatedAt: Date;
+  
+  // Additional fields for graph execution
+  completed: boolean;
+  finalOutput?: any;
+  nextAgent?: AgentRole;
 }
 
 /**
- * Base interface for all agents
+ * Task interface
+ */
+export interface Task {
+  id: string;
+  projectId: string;
+  parentTaskId?: string;
+  title: string;
+  description: string;
+  assignedAgent: AgentRole;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  dependencies: string[];
+  artifacts: string[];
+  createdAt: Date;
+  updatedAt: Date;
+  metadata?: any;
+}
+
+/**
+ * Artifact interface
+ */
+export interface Artifact {
+  id: string;
+  projectId: string;
+  taskId?: string;
+  agentId: string;
+  type: string;
+  name: string;
+  content: string;
+  version: number;
+  metadata?: any;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Message passed between agents
+ */
+export interface AgentMessage {
+  id: string;
+  from: AgentRole;
+  to: AgentRole | 'all';
+  type: 'request' | 'response' | 'event' | 'handoff';
+  content: any;
+  timestamp: Date;
+  metadata?: any;
+}
+
+/**
+ * Response structure from agents
+ */
+export interface AgentResponse {
+  success: boolean;
+  data?: any;
+  error?: string;
+  nextAgent?: AgentRole;
+  handoff?: {
+    to: AgentRole;
+    reason: string;
+    context?: any;
+  };
+}
+
+/**
+ * Error class for agent operations
+ */
+export class AgentError extends Error {
+  constructor(
+    message: string,
+    public agentRole: AgentRole,
+    public code?: string,
+    public details?: any
+  ) {
+    super(message);
+    this.name = 'AgentError';
+  }
+}
+
+/**
+ * Core agent interface
  */
 export interface IAgent {
   id: string;
@@ -55,9 +151,9 @@ export interface IAgent {
   status: AgentStatus;
   
   // Core methods
-  execute(state: HeliosSwarmState): Promise<Partial<HeliosSwarmState>>;
-  log(action: string, details: any): Promise<void>;
-  communicate(targetAgent: string, message: AgentMessage): Promise<void>;
+  execute(state: Partial<HeliosSwarmState>): Promise<Partial<HeliosSwarmState>>;
+  validate(input: any): Promise<boolean>;
+  handleMessage(message: AgentMessage): Promise<AgentResponse>;
   
   // Lifecycle methods
   initialize(): Promise<void>;
@@ -65,177 +161,32 @@ export interface IAgent {
 }
 
 /**
- * Inter-agent message structure
- */
-export interface AgentMessage {
-  id: string;
-  from: string;
-  to: string;
-  type: MessageType;
-  payload: any;
-  timestamp: Date;
-  correlationId?: string;
-}
-
-/**
- * Agent response structure
- */
-export interface AgentResponse {
-  success: boolean;
-  data?: any;
-  error?: string;
-  metadata?: Record<string, any>;
-}
-
-/**
- * Task structure from the database
- */
-export interface Task {
-  id: string;
-  project_id: string;
-  description: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed';
-  dependencies: string[];
-  assigned_agent?: string;
-  result?: any;
-  created_at: Date;
-  updated_at: Date;
-}
-
-/**
- * Artifact structure from the database
- */
-export interface Artifact {
-  id: string;
-  project_id: string;
-  file_path: string;
-  content: string;
-  version: number;
-  is_latest: boolean;
-  metadata?: Record<string, any>;
-  created_at: Date;
-  created_by: string;
-}
-
-/**
- * Project structure from the database
- */
-export interface Project {
-  id: string;
-  name: string;
-  user_prompt: string;
-  status: 'planning' | 'in_progress' | 'completed' | 'failed';
-  created_at: Date;
-  updated_at: Date;
-}
-
-/**
- * Central state object for the Helios swarm
- * This is the single source of truth for all agents
- */
-export interface HeliosSwarmState {
-  active_agent: string;
-  project_id: string;
-  project: Project;
-  user_prompt: string;
-  plan: Task[];
-  artifacts: Artifact[];
-  current_task?: Task;
-  agent_logs: AgentLog[];
-  error_logs: ErrorLog[];
-  handoff_history: HandoffRecord[];
-  validation_results?: ValidationResult[];
-}
-
-/**
- * Agent log entry structure
- */
-export interface AgentLog {
-  id: string;
-  project_id: string;
-  agent_role: AgentRole;
-  action: string;
-  action_details: Record<string, any>;
-  timestamp: Date;
-}
-
-/**
- * Error log structure for debugging
- */
-export interface ErrorLog {
-  id: string;
-  agent_id: string;
-  error_type: string;
-  message: string;
-  stack_trace?: string;
-  context: Record<string, any>;
-  timestamp: Date;
-}
-
-/**
- * Handoff record for tracking control flow
- */
-export interface HandoffRecord {
-  from_agent: string;
-  to_agent: string;
-  reason: string;
-  task_id?: string;
-  timestamp: Date;
-}
-
-/**
- * Validation result structure
- */
-export interface ValidationResult {
-  valid: boolean;
-  errors: string[];
-  warnings: string[];
-  suggestions?: string[];
-}
-
-/**
- * Agent configuration options
+ * Agent configuration
  */
 export interface AgentConfig {
-  maxRetries: number;
-  retryDelay: number;
-  timeout: number;
-  llmConfig?: LLMConfig;
+  maxRetries?: number;
+  retryDelay?: number;
+  timeout?: number;
+  logLevel?: 'debug' | 'info' | 'warn' | 'error';
 }
 
 /**
- * LLM configuration for agents that use language models
- */
-export interface LLMConfig {
-  model: string;
-  temperature: number;
-  maxTokens: number;
-  systemPrompt?: string;
-}
-
-/**
- * Agent registry interface
- */
-export interface IAgentRegistry {
-  register(agent: IAgent): void;
-  unregister(agentId: string): void;
-  getAgent(agentId: string): IAgent | undefined;
-  getAgentsByRole(role: AgentRole): IAgent[];
-  getAgentsByProject(projectId: string): IAgent[];
-  getAllAgents(): IAgent[];
-}
-
-/**
- * Handoff tool function type
- */
-export type HandoffTool = (state: HeliosSwarmState, reason: string) => Partial<HeliosSwarmState>;
-
-/**
- * Agent context provided to all agents
+ * Context provided to agents
  */
 export interface AgentContext {
-  db: Pool;
-  io: SocketIOServer;
-  registry: IAgentRegistry;
-  projectWorkspace: string;
+  db: any; // Database connection
+  io: Socket; // Socket.io instance
+  logger: any; // Logger instance
+  config: AgentConfig;
+}
+
+/**
+ * Handoff tool interface
+ */
+export interface HandoffTool {
+  name: string;
+  description: string;
+  targetAgent: AgentRole;
+  condition?: (state: HeliosSwarmState) => boolean;
+  prepareContext?: (state: HeliosSwarmState) => any;
 }

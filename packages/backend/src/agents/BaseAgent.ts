@@ -1,138 +1,139 @@
-/**
- * BaseAgent Abstract Class
- * Provides core functionality for all agents in the Helios system
- */
-
-import { v4 as uuidv4 } from 'uuid';
-import { Pool } from 'pg';
-import { Server as SocketIOServer } from 'socket.io';
+import { EventEmitter } from 'events';
 import { 
   IAgent, 
   AgentRole, 
   AgentStatus, 
   AgentMessage, 
-  HeliosSwarmState,
-  AgentConfig,
+  AgentResponse, 
   AgentContext,
-  AgentLog,
-  ValidationResult
+  AgentError,
+  HeliosSwarmState
 } from './types';
-import logger from '../utils/logger';
 
 /**
- * Abstract base class for all Helios agents
- * Implements core agent functionality including logging, communication, and error handling
+ * Abstract base class for all agents in the Helios swarm
  */
-export abstract class BaseAgent implements IAgent {
-  public readonly id: string;
-  public readonly role: AgentRole;
+export abstract class BaseAgent extends EventEmitter implements IAgent {
+  public id: string;
+  public role: AgentRole;
   public projectId: string;
-  public status: AgentStatus = AgentStatus.IDLE;
-
-  protected config: AgentConfig;
+  public status: AgentStatus;
+  
   protected context: AgentContext;
-  private retryCount: Map<string, number> = new Map();
-
+  protected maxRetries: number;
+  protected retryDelay: number;
+  
   constructor(
     role: AgentRole,
     projectId: string,
-    context: AgentContext,
-    config?: Partial<AgentConfig>
+    context: AgentContext
   ) {
-    this.id = uuidv4();
+    super();
+    this.id = `${role}-${projectId}-${Date.now()}`;
     this.role = role;
     this.projectId = projectId;
+    this.status = AgentStatus.IDLE;
     this.context = context;
-    
-    // Default configuration with overrides
-    this.config = {
-      maxRetries: 3,
-      retryDelay: 1000,
-      timeout: 60000,
-      ...config
-    };
+    this.maxRetries = context.config.maxRetries || 3;
+    this.retryDelay = context.config.retryDelay || 1000;
   }
-
+  
+  /**
+   * Abstract method to be implemented by specific agents
+   */
+  abstract execute(state: Partial<HeliosSwarmState>): Promise<Partial<HeliosSwarmState>>;
+  
+  /**
+   * Validate input for the agent
+   */
+  abstract validate(input: any): Promise<boolean>;
+  
   /**
    * Initialize the agent
    */
   async initialize(): Promise<void> {
     this.status = AgentStatus.IDLE;
-    logger.info(`Agent ${this.role} (${this.id}) initialized for project ${this.projectId}`);
-    await this.log('agent_initialized', { agentId: this.id, role: this.role });
+    this.emit('initialized', { agentId: this.id, role: this.role });
+    await this.logAction('initialized', { status: 'success' });
   }
-
+  
   /**
    * Shutdown the agent
    */
   async shutdown(): Promise<void> {
-    this.status = AgentStatus.COMPLETED;
-    await this.log('agent_shutdown', { agentId: this.id, role: this.role });
-    logger.info(`Agent ${this.role} (${this.id}) shutdown`);
+    this.status = AgentStatus.IDLE;
+    this.emit('shutdown', { agentId: this.id, role: this.role });
+    await this.logAction('shutdown', { status: 'success' });
   }
-
+  
   /**
-   * Abstract execute method - must be implemented by subclasses
-   * This is where the agent performs its specialized work
+   * Handle incoming messages
    */
-  abstract execute(state: HeliosSwarmState): Promise<Partial<HeliosSwarmState>>;
-
-  /**
-   * Log an action to the database
-   */
-  async log(action: string, details: any): Promise<void> {
+  async handleMessage(message: AgentMessage): Promise<AgentResponse> {
     try {
-      const query = `
-        INSERT INTO helios.agent_logs (project_id, agent_role, action, action_details)
-        VALUES ($1, $2, $3, $4)
-      `;
+      this.emit('message:received', message);
       
-      await this.context.db.query(query, [
-        this.projectId,
-        this.role,
-        action,
-        JSON.stringify(details)
-      ]);
-
-      // Emit log event via WebSocket
-      this.context.io.to(`project:${this.projectId}`).emit('agent_log', {
-        projectId: this.projectId,
-        agentRole: this.role,
-        action,
-        actionDetails: details,
-        timestamp: new Date()
-      });
+      // Log the message
+      await this.logAction('message_received', { message });
+      
+      // Process based on message type
+      switch (message.type) {
+        case 'request':
+          return await this.handleRequest(message);
+        case 'handoff':
+          return await this.handleHandoff(message);
+        case 'event':
+          return await this.handleEvent(message);
+        default:
+          return {
+            success: true,
+            data: { acknowledged: true }
+          };
+      }
     } catch (error) {
-      logger.error(`Failed to log agent action: ${error}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      await this.logAction('message_error', { error: errorMessage, message });
+      
+      return {
+        success: false,
+        error: errorMessage
+      };
     }
   }
-
+  
   /**
-   * Send a message to another agent
+   * Handle request messages
    */
-  async communicate(targetAgentId: string, message: Omit<AgentMessage, 'id' | 'from' | 'timestamp'>): Promise<void> {
-    const fullMessage: AgentMessage = {
-      ...message,
-      id: uuidv4(),
-      from: this.id,
-      to: targetAgentId,
-      timestamp: new Date()
+  protected async handleRequest(message: AgentMessage): Promise<AgentResponse> {
+    // Default implementation - can be overridden
+    return {
+      success: true,
+      data: { message: 'Request received', agentRole: this.role }
     };
-
-    // Log the communication
-    await this.log('agent_communication', {
-      targetAgent: targetAgentId,
-      messageType: message.type,
-      correlationId: message.correlationId
-    });
-
-    // Emit via Socket.io for real-time communication
-    this.context.io.to(`agent:${targetAgentId}`).emit('agent_message', fullMessage);
-    
-    // Also emit to project room for monitoring
-    this.context.io.to(`project:${this.projectId}`).emit('agent_communication', fullMessage);
   }
-
+  
+  /**
+   * Handle handoff messages
+   */
+  protected async handleHandoff(message: AgentMessage): Promise<AgentResponse> {
+    // Default implementation - can be overridden
+    return {
+      success: true,
+      data: { message: 'Handoff received', agentRole: this.role }
+    };
+  }
+  
+  /**
+   * Handle event messages
+   */
+  protected async handleEvent(message: AgentMessage): Promise<AgentResponse> {
+    // Default implementation - can be overridden
+    return {
+      success: true,
+      data: { message: 'Event received', agentRole: this.role }
+    };
+  }
+  
   /**
    * Execute with retry logic
    */
@@ -140,116 +141,107 @@ export abstract class BaseAgent implements IAgent {
     operation: () => Promise<T>,
     operationName: string
   ): Promise<T> {
-    const attempts = this.retryCount.get(operationName) || 0;
+    let lastError: Error | null = null;
     
+    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+      try {
+        this.status = AgentStatus.EXECUTING;
+        const result = await operation();
+        this.status = AgentStatus.COMPLETED;
+        return result;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        
+        this.context.logger.warn(`${this.role}: ${operationName} failed (attempt ${attempt}/${this.maxRetries})`, {
+          error: lastError.message,
+          attempt
+        });
+        
+        if (attempt < this.maxRetries) {
+          // Exponential backoff
+          const delay = this.retryDelay * Math.pow(2, attempt - 1);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    this.status = AgentStatus.ERROR;
+    throw new AgentError(
+      `${operationName} failed after ${this.maxRetries} attempts`,
+      this.role,
+      'MAX_RETRIES_EXCEEDED',
+      { lastError: lastError?.message }
+    );
+  }
+  
+  /**
+   * Log action to database
+   */
+  protected async logAction(action: string, details: any): Promise<void> {
     try {
-      this.status = AgentStatus.EXECUTING;
-      const result = await operation();
-      this.retryCount.delete(operationName);
-      return result;
+      const query = `
+        INSERT INTO helios.agent_logs (agent_id, agent_role, project_id, action, details)
+        VALUES ($1, $2, $3, $4, $5)
+      `;
+      
+      await this.context.db.query(query, [
+        this.id,
+        this.role,
+        this.projectId,
+        action,
+        JSON.stringify(details)
+      ]);
     } catch (error) {
-      this.status = AgentStatus.ERROR;
-      
-      if (attempts < this.config.maxRetries) {
-        this.retryCount.set(operationName, attempts + 1);
-        
-        await this.log('retry_operation', {
-          operation: operationName,
-          attempt: attempts + 1,
-          maxRetries: this.config.maxRetries,
-          error: error instanceof Error ? error.message : String(error)
-        });
-        
-        // Exponential backoff
-        const delay = this.config.retryDelay * Math.pow(2, attempts);
-        await this.sleep(delay);
-        
-        // Recursive retry
-        return this.executeWithRetry(operation, operationName);
-      } else {
-        // Max retries exceeded
-        await this.log('operation_failed', {
-          operation: operationName,
-          attempts: attempts + 1,
-          error: error instanceof Error ? error.message : String(error)
-        });
-        
-        throw error;
-      }
+      this.context.logger.error(`Failed to log action: ${error}`);
     }
   }
-
+  
   /**
-   * Validate output using the Generate -> Validate -> Correct pattern
+   * Emit status change
    */
-  protected async validateAndCorrect<T>(
-    output: T,
-    validator: (output: T) => ValidationResult,
-    corrector: (output: T, errors: string[]) => Promise<T>,
-    maxAttempts: number = 2
-  ): Promise<T> {
-    let currentOutput = output;
-    let attempts = 0;
-
-    while (attempts < maxAttempts) {
-      const validation = validator(currentOutput);
-      
-      if (validation.valid) {
-        await this.log('validation_passed', {
-          attempts: attempts + 1,
-          warnings: validation.warnings
-        });
-        return currentOutput;
-      }
-
-      attempts++;
-      
-      if (attempts < maxAttempts) {
-        await this.log('validation_failed', {
-          attempt: attempts,
-          errors: validation.errors,
-          warnings: validation.warnings
-        });
-        
-        currentOutput = await corrector(currentOutput, validation.errors);
-      } else {
-        await this.log('validation_exceeded_attempts', {
-          attempts,
-          errors: validation.errors
-        });
-        
-        throw new Error(`Validation failed after ${attempts} attempts: ${validation.errors.join(', ')}`);
-      }
-    }
-
-    return currentOutput;
-  }
-
-  /**
-   * Update agent status and emit status change
-   */
-  protected async updateStatus(newStatus: AgentStatus): Promise<void> {
+  protected setStatus(status: AgentStatus): void {
     const oldStatus = this.status;
-    this.status = newStatus;
-    
-    await this.log('status_change', {
-      oldStatus,
-      newStatus
-    });
-    
-    this.context.io.to(`project:${this.projectId}`).emit('agent_status_change', {
-      agentId: this.id,
-      agentRole: this.role,
-      oldStatus,
-      newStatus,
-      timestamp: new Date()
-    });
+    this.status = status;
+    this.emit('status:changed', { oldStatus, newStatus: status });
   }
-
+  
   /**
-   * Helper method for delays
+   * Send message to another agent
    */
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+  protected async sendMessage(to: AgentRole, content: any, type: 'request' | 'response' | 'event' | 'handoff' = 'request'): Promise<void> {
+    const message: AgentMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      from: this.role,
+      to,
+      type,
+      content,
+      timestamp: new Date()
+    };
+    
+    // Emit to Socket.io
+    this.context.io.to(`agent-${to}`).emit('agent:message', message);
+    
+    // Log the message
+    await this.logAction('message_sent', { message });
+  }
+  
+  /**
+   * Broadcast message to all agents
+   */
+  protected async broadcast(content: any, type: 'event' = 'event'): Promise<void> {
+    const message: AgentMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      from: this.role,
+      to: 'all',
+      type,
+      content,
+      timestamp: new Date()
+    };
+    
+    // Emit to all agents
+    this.context.io.emit('agent:broadcast', message);
+    
+    // Log the broadcast
+    await this.logAction('message_broadcast', { message });
   }
 }

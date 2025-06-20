@@ -35,6 +35,7 @@ CREATE TABLE helios.projects (
     -- Constraints
     CONSTRAINT chk_project_status CHECK (status IN ('pending', 'planning', 'in_progress', 'completed', 'failed', 'cancelled'))
 );
+
 -- Create indexes for projects table
 CREATE INDEX idx_projects_status ON helios.projects(status);
 CREATE INDEX idx_projects_created_at ON helios.projects(created_at DESC);
@@ -62,7 +63,8 @@ CREATE TABLE helios.tasks (
     priority INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     started_at TIMESTAMP WITH TIME ZONE,
-    completed_at TIMESTAMP WITH TIME ZONE,    error_message TEXT,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    error_message TEXT,
     result JSONB,
     
     -- Foreign key constraint
@@ -90,6 +92,7 @@ COMMENT ON COLUMN helios.tasks.dependencies IS 'Array of task IDs that must comp
 COMMENT ON COLUMN helios.tasks.assigned_agent IS 'Name/type of the agent assigned to execute this task';
 COMMENT ON COLUMN helios.tasks.priority IS 'Task priority for scheduling (higher number = higher priority)';
 COMMENT ON COLUMN helios.tasks.result IS 'JSON result data from task execution';
+
 -- =====================================================
 -- ARTIFACTS TABLE
 -- =====================================================
@@ -117,6 +120,7 @@ CREATE TABLE helios.artifacts (
     -- Unique constraint for versioning
     CONSTRAINT uq_artifact_path_version UNIQUE (project_id, file_path, version)
 );
+
 -- Create indexes for artifacts table
 CREATE INDEX idx_artifacts_project_id ON helios.artifacts(project_id);
 CREATE INDEX idx_artifacts_task_id ON helios.artifacts(task_id);
@@ -143,7 +147,8 @@ COMMENT ON COLUMN helios.artifacts.metadata IS 'Additional metadata like file pe
 CREATE TABLE helios.agent_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     project_id UUID NOT NULL,
-    task_id UUID,    agent_role VARCHAR(100) NOT NULL,
+    task_id UUID,
+    agent_role VARCHAR(100) NOT NULL,
     action_type VARCHAR(100) NOT NULL,
     action_details JSONB NOT NULL DEFAULT '{}',
     timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -171,7 +176,8 @@ COMMENT ON TABLE helios.agent_logs IS 'Comprehensive logging of all agent action
 COMMENT ON COLUMN helios.agent_logs.id IS 'Unique identifier for the log entry';
 COMMENT ON COLUMN helios.agent_logs.project_id IS 'Reference to the parent project';
 COMMENT ON COLUMN helios.agent_logs.task_id IS 'Reference to the associated task (if applicable)';
-COMMENT ON COLUMN helios.agent_logs.agent_role IS 'Role/type of the agent that performed the action';COMMENT ON COLUMN helios.agent_logs.action_type IS 'Type of action performed (e.g., analyze, generate, validate)';
+COMMENT ON COLUMN helios.agent_logs.agent_role IS 'Role/type of the agent that performed the action';
+COMMENT ON COLUMN helios.agent_logs.action_type IS 'Type of action performed (e.g., analyze, generate, validate)';
 COMMENT ON COLUMN helios.agent_logs.action_details IS 'Detailed JSON data about the action';
 COMMENT ON COLUMN helios.agent_logs.timestamp IS 'When the action occurred';
 COMMENT ON COLUMN helios.agent_logs.duration_ms IS 'How long the action took in milliseconds';
@@ -200,7 +206,8 @@ CREATE TRIGGER update_projects_updated_at
 -- Function to manage artifact versioning
 CREATE OR REPLACE FUNCTION helios.manage_artifact_versions()
 RETURNS TRIGGER AS $$
-BEGIN    -- If inserting a new version, mark all previous versions as not latest
+BEGIN
+    -- If inserting a new version, mark all previous versions as not latest
     IF NEW.is_latest = TRUE THEN
         UPDATE helios.artifacts 
         SET is_latest = FALSE 
@@ -229,7 +236,8 @@ SELECT
     p.name,
     p.status,
     p.created_at,
-    COUNT(DISTINCT t.id) as total_tasks,    COUNT(DISTINCT CASE WHEN t.status = 'completed' THEN t.id END) as completed_tasks,
+    COUNT(DISTINCT t.id) as total_tasks,
+    COUNT(DISTINCT CASE WHEN t.status = 'completed' THEN t.id END) as completed_tasks,
     COUNT(DISTINCT CASE WHEN t.status = 'failed' THEN t.id END) as failed_tasks,
     COUNT(DISTINCT a.id) as total_artifacts
 FROM helios.projects p
@@ -258,7 +266,8 @@ JOIN helios.tasks dt ON dt.id = d.dependency_id;
 -- Insert sample agent roles for reference
 INSERT INTO helios.agent_logs (project_id, agent_role, action_type, action_details)
 SELECT 
-    uuid_generate_v4(),    'system', 
+    uuid_generate_v4(), 
+    'system', 
     'initialization', 
     jsonb_build_object(
         'message', 'Database schema initialized',
@@ -289,6 +298,7 @@ WHERE NOT EXISTS (
 -- GRANT ALL ON ALL TABLES IN SCHEMA helios TO helios_app;
 -- GRANT ALL ON ALL SEQUENCES IN SCHEMA helios TO helios_app;
 -- GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA helios TO helios_app;
+
 -- =====================================================
 -- PERFORMANCE NOTES
 -- =====================================================
