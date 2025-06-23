@@ -36,7 +36,7 @@ export async function initializeSupabaseSchema(): Promise<void> {
     logger.info('Initializing Supabase schema...');
     
     // Check if helios schema exists
-    const { data: schemas, error: schemaError } = await supabase
+    const { error: schemaError } = await supabase
       .rpc('pg_namespace_exists', { schema_name: 'helios' });
     
     if (schemaError) {

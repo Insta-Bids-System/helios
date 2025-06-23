@@ -4,7 +4,6 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
 
@@ -27,9 +26,8 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 
 async function setupSupabase() {
   try {
-    // Read the init.sql file
-    const initSqlPath = path.join(__dirname, '../../sql/init.sql');
-    const initSql = fs.readFileSync(initSqlPath, 'utf8');
+    // const initSqlPath = path.join(__dirname, '../../sql/init.sql');
+    // const initSql = fs.readFileSync(initSqlPath, 'utf8');
 
     console.log('📝 Note: Please run the init.sql in Supabase SQL Editor for full schema setup');
     console.log('   Go to: https://supabase.com/dashboard/project/kaeydovooyaxczctsmas/sql/new');

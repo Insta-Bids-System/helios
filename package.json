@@ -17,9 +17,11 @@
     "test": "npm run test:backend && npm run test:frontend",
     "test:backend": "npm --workspace=@helios/backend run test",
     "test:frontend": "npm --workspace=@helios/frontend run test",
-    "docker:up": "docker-compose up -d",
-    "docker:down": "docker-compose down",
-    "docker:logs": "docker-compose logs -f"
+    "docker:up": "docker-compose --env-file .env.docker up -d",
+    "docker:down": "docker-compose --env-file .env.docker down",
+    "docker:logs": "docker-compose --env-file .env.docker logs -f",
+    "docker:build": "docker-compose --env-file .env.docker build",
+    "docker:restart": "docker-compose --env-file .env.docker restart"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

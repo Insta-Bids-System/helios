@@ -37,7 +37,7 @@ router.get('/projects/:id', async (req: Request, res: Response): Promise<void> =
     }
     
     // Get workflow stats instead of tasks
-    const { data: workflows, error: workflowsError } = await supabase
+    const { data: workflows } = await supabase
       .from('workflows')
       .select('status')
       .eq('project_id', id);
@@ -48,7 +48,7 @@ router.get('/projects/:id', async (req: Request, res: Response): Promise<void> =
     }, {}) || {};
     
     // Get agent performance
-    const { data: agentStats, error: agentError } = await supabase
+    const { data: agentStats } = await supabase
       .from('agent_logs')
       .select('agent_role, duration_ms')
       .eq('project_id', id)
@@ -91,7 +91,7 @@ router.get('/projects/:id', async (req: Request, res: Response): Promise<void> =
 /**
  * Get global agent activity across all projects
  */
-router.get('/agents', async (req: Request, res: Response): Promise<void> => {
+router.get('/agents', async (_req: Request, res: Response): Promise<void> => {
   try {
     const { data: activity, error } = await getRecentAgentActivity(100);
     

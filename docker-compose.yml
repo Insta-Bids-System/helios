@@ -9,13 +9,14 @@ services:
     ports:
       - "3000:3000"
     environment:
-      NODE_ENV: development
-      DATABASE_URL: postgresql://helios:helios123@postgres:5432/helios_db
-      REDIS_URL: redis://redis:6379
-      SUPABASE_URL: https://kaeydovooyaxczctsmas.supabase.co
-      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImthZXlkb3Zvb3lheGN6Y3RzbWFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTAwNTQ0NjIsImV4cCI6MjA2NTYzMDQ2Mn0.zff2YLM-vJRfvaJvNrVAywNmgGurEQ9ZW8t_jKyE6DI
-      SUPABASE_SERVICE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImthZXlkb3Zvb3lheGN6Y3RzbWFzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDA1NDQ2MiwiZXhwIjoyMDY1NjMwNDYyfQ.FfFHyVLrkDkSNjvIMtSlf6lbWeboMTsPx30v1K0MAi4
-      SUPABASE_DB_URL: postgresql://postgres:InstaBidsSystem321@db.kaeydovooyaxczctsmas.supabase.co:5432/postgres
+      NODE_ENV: ${NODE_ENV}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+      SUPABASE_DB_URL: ${SUPABASE_DB_URL}
+      WORKSPACE_DIR: ${WORKSPACE_DIR}
     volumes:
       - ./packages/backend:/app
       - /app/node_modules
@@ -31,9 +32,9 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: helios
-      POSTGRES_PASSWORD: helios123
-      POSTGRES_DB: helios_db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./packages/backend/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -55,10 +56,11 @@ services:
     ports:
       - "5173:5173"
     environment:
-      VITE_API_URL: http://localhost:3000
+      VITE_API_URL: ${VITE_API_URL}
     volumes:
       - ./packages/frontend:/app
       - /app/node_modules
+      - ./packages/frontend/.env:/app/.env
     depends_on:
       - backend
 
@@ -68,8 +70,8 @@ services:
     ports:
       - "5050:80"
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
       PGADMIN_CONFIG_SERVER_MODE: 'False'
     volumes:
       - pgadmin-data:/var/lib/pgadmin

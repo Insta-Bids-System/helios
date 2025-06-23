@@ -32,26 +32,43 @@ Helios implements the following key patterns:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-org/helios.git
+git clone https://github.com/Insta-Bids-System/helios.git
 cd helios
 ```
 
-2. Install dependencies:
+2. Set up environment variables:
+```bash
+# Copy the Docker environment example
+cp .env.docker.example .env.docker
+
+# Edit .env.docker and add your Supabase credentials
+# (Required for monitoring features)
+
+# For backend-specific configuration
+cd packages/backend
+cp .env.example .env
+# Edit .env with your LLM API keys and other settings
+cd ../..
+```
+
+3. Install dependencies:
 ```bash
 npm install
 ```
 
-3. Start the infrastructure:
+4. Start the infrastructure:
 ```bash
-npm run docker:up
+# This will use the .env.docker file automatically
+docker-compose up -d
 ```
 
-4. Run database migrations:
+5. Run database migrations:
 ```bash
-npm run migrate
+# Wait for PostgreSQL to be ready, then:
+docker-compose exec backend npm run migrate
 ```
 
-5. Start the development servers:
+6. Start the development servers:
 ```bash
 npm run dev
 ```
@@ -65,6 +82,12 @@ The application will be available at:
 - `/packages/backend` - Node.js/TypeScript backend with agent runtime
 - `/packages/frontend` - React/TypeScript frontend (Mission Control UI)
 - `/workspaces` - Agent-generated project workspaces
+
+## Documentation
+
+- [Environment Setup Guide](./docs/ENVIRONMENT_SETUP.md) - Detailed guide on configuring environment variables
+- [Supabase Setup](./packages/backend/SUPABASE_SETUP.md) - Instructions for setting up Supabase monitoring
+- [Database Monitoring](./packages/backend/DATABASE_MONITORING.md) - Overview of the monitoring architecture
 
 ## Development
 

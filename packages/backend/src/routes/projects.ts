@@ -263,13 +263,9 @@ router.get('/:id/tasks', async (req: Request, res: Response): Promise<void> => {
     const db = (req.app as any).agentContext.db as Pool;
     
     const result = await db.query(`
-      SELECT t.*, 
-             array_agg(DISTINCT td.depends_on_task_id) as dependencies
-      FROM helios.tasks t
-      LEFT JOIN helios.task_dependencies td ON td.task_id = t.id
-      WHERE t.project_id = $1
-      GROUP BY t.id
-      ORDER BY t.created_at ASC
+      SELECT * FROM helios.tasks
+      WHERE project_id = $1
+      ORDER BY created_at ASC
     `, [id]);
     
     res.json({
