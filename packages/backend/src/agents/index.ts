@@ -15,14 +15,15 @@ export { OrchestratorAgent } from './OrchestratorAgent';
 
 // Export placeholder agents
 export {
-  ProductManagerAgent,
+  ProjectAnalyzerAgent,
+  TaskDecomposerAgent,
   FrontendEngineerAgent,
   BackendEngineerAgent,
   FullstackEngineerAgent,
   DevOpsEngineerAgent,
   QAEngineerAgent,
   CodeReviewerAgent,
-  IntegrationSpecialistAgent
+  DocumentationWriterAgent
 } from './PlaceholderAgents';
 
 // Re-export commonly used types for convenience

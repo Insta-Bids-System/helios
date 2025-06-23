@@ -5,8 +5,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { logger } from './utils/logger';
-import { pool } from './config/database';
-import { AgentRegistry, AgentContext } from './agents';
+import pool from './config/database';
+import { AgentRegistry, AgentContext, AgentRole } from './agents';
 import routes from './routes';
 
 // Load environment variables
@@ -21,16 +21,13 @@ const io = new Server(httpServer, {
   }
 });
 
-// Update agent context with io
-agentContext.io = io;
-
 // Initialize Agent Registry
 const agentRegistry = new AgentRegistry();
 
 // Create agent context
 const agentContext: AgentContext = {
   db: pool,
-  io: null as any, // Will be set after io is created
+  io: io as any, // Cast to Socket type expected by AgentContext
   logger,
   config: {
     maxRetries: 3,
@@ -57,11 +54,19 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({ 
     status: 'healthy', 
     timestamp: new Date().toISOString(),
-    agents: agentRegistry.getStatistics()
+    agents: {
+      total: agentRegistry.getAllAgents().length,
+      byRole: Object.fromEntries(
+        Object.values(AgentRole).map(role => [
+          role,
+          agentRegistry.getAgentsByRole(role as AgentRole).length
+        ])
+      )
+    }
   });
 });
 
@@ -134,7 +139,7 @@ app.use('/api', routes);
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => {
   logger.info(`Helios backend server running on port ${PORT}`);
-  logger.info(`Agent Registry initialized with ${Object.keys(agentRegistry.getStatistics().agentsByRole).length} agent roles`);
+  logger.info(`Agent Registry initialized with ${Object.values(AgentRole).length} agent roles`);
 });
 
 // Graceful shutdown

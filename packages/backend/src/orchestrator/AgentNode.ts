@@ -3,7 +3,8 @@ import {
   AgentRole, 
   AgentContext, 
   HeliosSwarmState,
-  AgentError
+  AgentError,
+  AgentStatus
 } from '../agents/types';
 
 /**
@@ -15,13 +16,14 @@ export class AgentNode extends BaseAgent {
   private validateFunction?: (input: any) => Promise<boolean>;
   
   constructor(
+    id: string,
     role: AgentRole,
     projectId: string,
     context: AgentContext,
     executeFunction?: (state: Partial<HeliosSwarmState>) => Promise<Partial<HeliosSwarmState>>,
     validateFunction?: (input: any) => Promise<boolean>
   ) {
-    super(role, projectId, context);
+    super(id, role, projectId, context);
     this.executeFunction = executeFunction;
     this.validateFunction = validateFunction;
   }
@@ -31,7 +33,7 @@ export class AgentNode extends BaseAgent {
    */
   async execute(state: Partial<HeliosSwarmState>): Promise<Partial<HeliosSwarmState>> {
     try {
-      this.setStatus('executing');
+      this.setStatus(AgentStatus.EXECUTING);
       await this.logAction('execute_started', { state });
       
       // If a custom execute function is provided, use it
@@ -49,11 +51,11 @@ export class AgentNode extends BaseAgent {
       );
       
       await this.logAction('execute_completed', { updatedState });
-      this.setStatus('completed');
+      this.setStatus(AgentStatus.COMPLETED);
       
       return updatedState;
     } catch (error) {
-      this.setStatus('error');
+      this.setStatus(AgentStatus.ERROR);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       await this.logAction('execute_error', { error: errorMessage });
       
@@ -92,8 +94,8 @@ export class AgentNode extends BaseAgent {
     const updatedState: Partial<HeliosSwarmState> = { ...state };
     
     switch (this.role) {
-      case AgentRole.PRODUCT_MANAGER:
-        // Product manager logic
+      case AgentRole.PROJECT_ANALYZER:
+        // Project analyzer logic
         updatedState.messages = [
           ...(state.messages || []),
           {
@@ -101,11 +103,28 @@ export class AgentNode extends BaseAgent {
             from: this.role,
             to: 'all',
             type: 'event',
-            content: 'Requirements analysis completed',
+            content: 'Project analysis completed',
             timestamp: new Date()
           }
         ];
-        updatedState.nextAgent = AgentRole.FRONTEND_ENGINEER;
+        updatedState.nextAgent = AgentRole.TASK_DECOMPOSER;
+        break;
+        
+      case AgentRole.TASK_DECOMPOSER:
+        // Task decomposer logic
+        updatedState.messages = [
+          ...(state.messages || []),
+          {
+            id: `msg-${Date.now()}`,
+            from: this.role,
+            to: 'all',
+            type: 'event',
+            content: 'Task decomposition completed',
+            timestamp: new Date()
+          }
+        ];
+        // Route to first implementation agent based on tasks
+        updatedState.nextAgent = AgentRole.BACKEND_ENGINEER;
         break;
         
       case AgentRole.FRONTEND_ENGINEER:
@@ -121,7 +140,7 @@ export class AgentNode extends BaseAgent {
             timestamp: new Date()
           }
         ];
-        updatedState.nextAgent = AgentRole.BACKEND_ENGINEER;
+        updatedState.nextAgent = AgentRole.QA_ENGINEER;
         break;
         
       case AgentRole.BACKEND_ENGINEER:
@@ -134,6 +153,22 @@ export class AgentNode extends BaseAgent {
             to: 'all',
             type: 'event',
             content: 'Backend implementation completed',
+            timestamp: new Date()
+          }
+        ];
+        updatedState.nextAgent = AgentRole.FRONTEND_ENGINEER;
+        break;
+        
+      case AgentRole.FULLSTACK_ENGINEER:
+        // Fullstack engineer logic
+        updatedState.messages = [
+          ...(state.messages || []),
+          {
+            id: `msg-${Date.now()}`,
+            from: this.role,
+            to: 'all',
+            type: 'event',
+            content: 'Full-stack implementation completed',
             timestamp: new Date()
           }
         ];
@@ -169,16 +204,11 @@ export class AgentNode extends BaseAgent {
             timestamp: new Date()
           }
         ];
-        // Check if integration is needed
-        if (this.needsIntegration(state)) {
-          updatedState.nextAgent = AgentRole.INTEGRATION_SPECIALIST;
-        } else {
-          updatedState.completed = true;
-        }
+        updatedState.nextAgent = AgentRole.DOCUMENTATION_WRITER;
         break;
         
-      case AgentRole.INTEGRATION_SPECIALIST:
-        // Integration specialist logic
+      case AgentRole.DOCUMENTATION_WRITER:
+        // Documentation writer logic
         updatedState.messages = [
           ...(state.messages || []),
           {
@@ -186,7 +216,7 @@ export class AgentNode extends BaseAgent {
             from: this.role,
             to: 'all',
             type: 'event',
-            content: 'Integration completed',
+            content: 'Documentation completed',
             timestamp: new Date()
           }
         ];
@@ -206,6 +236,7 @@ export class AgentNode extends BaseAgent {
             timestamp: new Date()
           }
         ];
+        updatedState.nextAgent = AgentRole.QA_ENGINEER;
         break;
         
       default:
@@ -234,12 +265,17 @@ export class AgentNode extends BaseAgent {
    */
   private async performRoleSpecificValidation(input: any): Promise<boolean> {
     switch (this.role) {
-      case AgentRole.PRODUCT_MANAGER:
+      case AgentRole.PROJECT_ANALYZER:
         // Validate project requirements
         return !!(input.projectName && input.projectDescription);
         
+      case AgentRole.TASK_DECOMPOSER:
+        // Validate project has been analyzed
+        return !!(input.projectDescription);
+        
       case AgentRole.FRONTEND_ENGINEER:
       case AgentRole.BACKEND_ENGINEER:
+      case AgentRole.FULLSTACK_ENGINEER:
         // Validate code structure
         return !!(input.code && input.language);
         
@@ -251,22 +287,16 @@ export class AgentNode extends BaseAgent {
         // Validate review comments
         return !!(input.reviewComments || input.approved);
         
+      case AgentRole.DOCUMENTATION_WRITER:
+        // Validate documentation input
+        return !!(input.artifacts || input.code);
+        
       default:
         // Default validation - just check if input exists
         return !!input;
     }
   }
   
-  /**
-   * Check if integration is needed based on state
-   */
-  private needsIntegration(state: Partial<HeliosSwarmState>): boolean {
-    // Check if there are multiple components that need integration
-    const hasMultipleComponents = state.artifacts && state.artifacts.size > 2;
-    const hasComplexDependencies = state.taskDependencies && state.taskDependencies.size > 3;
-    
-    return !!(hasMultipleComponents || hasComplexDependencies);
-  }
   
   /**
    * Set a custom execute function for this node

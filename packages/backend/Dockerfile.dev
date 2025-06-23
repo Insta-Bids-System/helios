@@ -1,0 +1,22 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json ./
+
+# Install dependencies (using npm install for development)
+RUN npm install
+
+# Install tsx globally for TypeScript execution
+RUN npm install -g tsx
+
+# Copy TypeScript config and source
+COPY tsconfig.json ./
+COPY src ./src
+
+# Expose port
+EXPOSE 3000
+
+# Start the application in development mode
+CMD ["npm", "run", "dev"]

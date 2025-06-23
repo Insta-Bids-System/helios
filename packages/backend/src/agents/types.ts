@@ -5,14 +5,15 @@ import { Socket } from 'socket.io';
  */
 export enum AgentRole {
   ORCHESTRATOR = 'orchestrator',
-  PRODUCT_MANAGER = 'product_manager',
+  PROJECT_ANALYZER = 'project_analyzer',      // Changed from PRODUCT_MANAGER
+  TASK_DECOMPOSER = 'task_decomposer',        // NEW
   FRONTEND_ENGINEER = 'frontend_engineer',
   BACKEND_ENGINEER = 'backend_engineer',
   FULLSTACK_ENGINEER = 'fullstack_engineer',
   DEVOPS_ENGINEER = 'devops_engineer',
   QA_ENGINEER = 'qa_engineer',
-  CODE_REVIEWER = 'code_reviewer',
-  INTEGRATION_SPECIALIST = 'integration_specialist'
+  DOCUMENTATION_WRITER = 'documentation_writer', // NEW
+  CODE_REVIEWER = 'code_reviewer'
 }
 
 /**
@@ -42,7 +43,12 @@ export interface HeliosSwarmState {
   // Task management
   tasks: Task[];
   currentTaskId: string | null;
+  current_task?: Task;  // Current task being worked on
+  plan?: Task[];        // Planned tasks
   taskDependencies: Map<string, string[]>;
+  
+  // Handoff tracking
+  handoff_history?: HandoffRecord[];
   
   // Artifacts and outputs
   artifacts: Map<string, Artifact>;
@@ -181,12 +187,17 @@ export interface AgentContext {
 }
 
 /**
- * Handoff tool interface
+ * Handoff tool function type
  */
-export interface HandoffTool {
-  name: string;
-  description: string;
-  targetAgent: AgentRole;
-  condition?: (state: HeliosSwarmState) => boolean;
-  prepareContext?: (state: HeliosSwarmState) => any;
+export type HandoffTool = (state: HeliosSwarmState, reason: string) => Partial<HeliosSwarmState>;
+
+/**
+ * Record of a handoff between agents
+ */
+export interface HandoffRecord {
+  from_agent: string | null;
+  to_agent: string;
+  reason: string;
+  task_id?: string;
+  timestamp: Date;
 }

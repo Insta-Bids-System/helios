@@ -3,14 +3,14 @@
  * Manages all active agents in the Helios system
  */
 
-import { IAgent, IAgentRegistry, AgentRole } from './types';
-import logger from '../utils/logger';
+import { IAgent, AgentRole } from './types';
+import { logger } from '../utils/logger';
 
 /**
  * Registry for managing agent instances
  * Provides lookup and lifecycle management for all agents
  */
-export class AgentRegistry implements IAgentRegistry {
+export class AgentRegistry {
   private agents: Map<string, IAgent> = new Map();
   private agentsByRole: Map<AgentRole, Set<string>> = new Map();
   private agentsByProject: Map<string, Set<string>> = new Map();

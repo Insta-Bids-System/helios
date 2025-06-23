@@ -24,18 +24,19 @@ export abstract class BaseAgent extends EventEmitter implements IAgent {
   protected retryDelay: number;
   
   constructor(
+    id: string,
     role: AgentRole,
     projectId: string,
     context: AgentContext
   ) {
     super();
-    this.id = `${role}-${projectId}-${Date.now()}`;
+    this.id = id;
     this.role = role;
     this.projectId = projectId;
     this.status = AgentStatus.IDLE;
     this.context = context;
-    this.maxRetries = context.config.maxRetries || 3;
-    this.retryDelay = context.config.retryDelay || 1000;
+    this.maxRetries = context.config?.maxRetries || 3;
+    this.retryDelay = context.config?.retryDelay || 1000;
   }
   
   /**
@@ -104,7 +105,7 @@ export abstract class BaseAgent extends EventEmitter implements IAgent {
   /**
    * Handle request messages
    */
-  protected async handleRequest(message: AgentMessage): Promise<AgentResponse> {
+  protected async handleRequest(_message: AgentMessage): Promise<AgentResponse> {
     // Default implementation - can be overridden
     return {
       success: true,
@@ -115,7 +116,7 @@ export abstract class BaseAgent extends EventEmitter implements IAgent {
   /**
    * Handle handoff messages
    */
-  protected async handleHandoff(message: AgentMessage): Promise<AgentResponse> {
+  protected async handleHandoff(_message: AgentMessage): Promise<AgentResponse> {
     // Default implementation - can be overridden
     return {
       success: true,
@@ -126,7 +127,7 @@ export abstract class BaseAgent extends EventEmitter implements IAgent {
   /**
    * Handle event messages
    */
-  protected async handleEvent(message: AgentMessage): Promise<AgentResponse> {
+  protected async handleEvent(_message: AgentMessage): Promise<AgentResponse> {
     // Default implementation - can be overridden
     return {
       success: true,

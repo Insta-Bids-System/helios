@@ -4,9 +4,7 @@ import {
   AgentRole,
   AgentContext,
   HeliosSwarmState,
-  AgentError,
-  AgentStatus,
-  Task
+  AgentError
 } from '../agents/types';
 
 /**
@@ -60,31 +58,63 @@ export class OrchestratorGraph extends EventEmitter {
    */
   private initializeDefaultAgents(): void {
     const roles = [
-      AgentRole.PRODUCT_MANAGER,
+      AgentRole.PROJECT_ANALYZER,      // Changed from PRODUCT_MANAGER
+      AgentRole.TASK_DECOMPOSER,       // NEW
       AgentRole.FRONTEND_ENGINEER,
       AgentRole.BACKEND_ENGINEER,
       AgentRole.FULLSTACK_ENGINEER,
       AgentRole.DEVOPS_ENGINEER,
       AgentRole.QA_ENGINEER,
       AgentRole.CODE_REVIEWER,
-      AgentRole.INTEGRATION_SPECIALIST
+      AgentRole.DOCUMENTATION_WRITER   // NEW, replacing INTEGRATION_SPECIALIST
     ];
     
     roles.forEach(role => {
-      const agent = new AgentNode(role, this.state.projectId, this.context);
+      const agent = new AgentNode(
+        `${role}-${this.state.projectId}`,
+        role,
+        this.state.projectId,
+        this.context
+      );
       this.agents.set(role, agent);
     });
   }
   
   /**
    * Add a custom agent to the graph
+   * Can accept either an AgentNode or an object with execute function
    */
-  addAgent(role: AgentRole, agent: AgentNode): void {
+  async addAgent(role: AgentRole, agent: AgentNode | { name: string; execute: Function; shutdown?: Function }): Promise<void> {
     if (this.isRunning) {
       throw new Error('Cannot add agents while graph is running');
     }
-    this.agents.set(role, agent);
-    this.emit('agent:added', { role, agentId: agent.id });
+    
+    let agentNode: AgentNode;
+    
+    if (agent instanceof AgentNode) {
+      agentNode = agent;
+    } else {
+      // Create an AgentNode wrapper for the provided functions
+      agentNode = new AgentNode(
+        `${role}-${this.state.projectId}`,
+        role,
+        this.state.projectId,
+        this.context
+      );
+      
+      // Set the custom execute function
+      if (agent.execute) {
+        agentNode.setExecuteFunction(agent.execute as any);
+      }
+      
+      // Store shutdown function if provided
+      if (agent.shutdown) {
+        (agentNode as any).customShutdown = agent.shutdown;
+      }
+    }
+    
+    this.agents.set(role, agentNode);
+    this.emit('agent:added', { role, agentId: agentNode.id });
   }
   
   /**
@@ -109,6 +139,13 @@ export class OrchestratorGraph extends EventEmitter {
   }
   
   /**
+   * Get all agents
+   */
+  getAllAgents(): AgentNode[] {
+    return Array.from(this.agents.values());
+  }
+  
+  /**
    * Main execution loop - runs agents based on state routing
    */
   async run(initialAgent?: AgentRole): Promise<HeliosSwarmState> {
@@ -121,7 +158,7 @@ export class OrchestratorGraph extends EventEmitter {
     
     try {
       // Set initial agent
-      this.state.active_agent = initialAgent || AgentRole.PRODUCT_MANAGER;
+      this.state.active_agent = initialAgent || AgentRole.PROJECT_ANALYZER;
       
       // Initialize all agents
       await this.initializeAgents();
@@ -265,12 +302,17 @@ export class OrchestratorGraph extends EventEmitter {
     const currentAgent = this.state.active_agent;
     
     switch (currentAgent) {
-      case AgentRole.PRODUCT_MANAGER:
-        // After PM, route based on project type
+      case AgentRole.PROJECT_ANALYZER:
+        // After analysis, move to task decomposition
+        this.state.active_agent = AgentRole.TASK_DECOMPOSER;
+        break;
+        
+      case AgentRole.TASK_DECOMPOSER:
+        // After task decomposition, route based on project type
         if (this.requiresFullstack()) {
           this.state.active_agent = AgentRole.FULLSTACK_ENGINEER;
         } else {
-          this.state.active_agent = AgentRole.FRONTEND_ENGINEER;
+          this.state.active_agent = AgentRole.BACKEND_ENGINEER;
         }
         break;
         
@@ -312,17 +354,14 @@ export class OrchestratorGraph extends EventEmitter {
         if (this.hasFailedReview()) {
           // Route back to appropriate engineer
           this.state.active_agent = this.determineEngineerForFixes();
-        } else if (this.requiresIntegration()) {
-          this.state.active_agent = AgentRole.INTEGRATION_SPECIALIST;
         } else {
-          // Mark as completed
-          this.state.completed = true;
-          this.state.active_agent = null;
+          // After code review, generate documentation
+          this.state.active_agent = AgentRole.DOCUMENTATION_WRITER;
         }
         break;
         
-      case AgentRole.INTEGRATION_SPECIALIST:
-        // After integration, mark as completed
+      case AgentRole.DOCUMENTATION_WRITER:
+        // After documentation, mark as completed
         this.state.completed = true;
         this.state.active_agent = null;
         break;
@@ -388,15 +427,6 @@ export class OrchestratorGraph extends EventEmitter {
     
     // Default to frontend
     return AgentRole.FRONTEND_ENGINEER;
-  }
-  
-  /**
-   * Check if integration is required
-   */
-  private requiresIntegration(): boolean {
-    // Check if there are multiple components that need integration
-    return this.state.artifacts.size > 3 || 
-           this.state.taskDependencies.size > 5;
   }
   
   /**

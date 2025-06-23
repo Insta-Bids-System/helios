@@ -1,26 +1,25 @@
-import { Pool } from 'pg';
 import { EventEmitter } from 'events';
-import { v4 as uuidv4 } from 'uuid';
 import { BaseAgent } from './BaseAgent';
 import { 
   AgentRole, 
   AgentStatus, 
   HeliosSwarmState, 
-  IAgent, 
   AgentContext,
-  Task,
   AgentMessage,
   AgentResponse
 } from './types';
 import { OrchestratorGraph } from '../orchestrator';
-import { ProductManagerAgent } from './ProductManagerAgent';
-import { FrontendEngineerAgent } from './FrontendEngineerAgent';
-import { BackendEngineerAgent } from './BackendEngineerAgent';
-import { FullstackEngineerAgent } from './FullstackEngineerAgent';
-import { DevOpsEngineerAgent } from './DevOpsEngineerAgent';
-import { QAEngineerAgent } from './QAEngineerAgent';
-import { CodeReviewerAgent } from './CodeReviewerAgent';
-import { IntegrationSpecialistAgent } from './IntegrationSpecialistAgent';
+import {
+  ProjectAnalyzerAgent,
+  TaskDecomposerAgent,
+  BackendEngineerAgent,
+  FrontendEngineerAgent,
+  FullstackEngineerAgent,
+  DevOpsEngineerAgent,
+  QAEngineerAgent,
+  CodeReviewerAgent,
+  DocumentationWriterAgent
+} from './PlaceholderAgents';
 
 export class OrchestratorAgent extends BaseAgent {
   private graph: OrchestratorGraph | null = null;
@@ -43,7 +42,12 @@ export class OrchestratorAgent extends BaseAgent {
     await super.initialize();
     
     // Initialize the orchestrator graph
-    this.graph = new OrchestratorGraph();
+    this.graph = new OrchestratorGraph(
+      this.projectId,
+      'Project', // Will be set later
+      'Description', // Will be set later
+      this.context
+    );
     
     // Register all agents in the graph
     await this.registerSwarmAgents();
@@ -51,66 +55,40 @@ export class OrchestratorAgent extends BaseAgent {
     // Set up event listeners
     this.setupEventListeners();
     
-    this.logger.info(`OrchestratorAgent initialized for project ${this.projectId}`);
+    this.context.logger.info(`OrchestratorAgent initialized for project ${this.projectId}`);
   }
 
   /**
-   * Register all swarm agents with the graph
+   * Register all swarm agents in the graph
    */
   private async registerSwarmAgents(): Promise<void> {
-    if (!this.graph) {
-      throw new Error('Graph not initialized');
-    }
-
-    // Create and add all agents
-    const agents: IAgent[] = [
-      new ProductManagerAgent(
-        `${this.projectId}-pm`,
-        this.projectId,
-        this.context
-      ),
-      new FrontendEngineerAgent(
-        `${this.projectId}-frontend`,
-        this.projectId,
-        this.context
-      ),
-      new BackendEngineerAgent(
-        `${this.projectId}-backend`,
-        this.projectId,
-        this.context
-      ),
-      new FullstackEngineerAgent(
-        `${this.projectId}-fullstack`,
-        this.projectId,
-        this.context
-      ),
-      new DevOpsEngineerAgent(
-        `${this.projectId}-devops`,
-        this.projectId,
-        this.context
-      ),
-      new QAEngineerAgent(
-        `${this.projectId}-qa`,
-        this.projectId,
-        this.context
-      ),
-      new CodeReviewerAgent(
-        `${this.projectId}-reviewer`,
-        this.projectId,
-        this.context
-      ),
-      new IntegrationSpecialistAgent(
-        `${this.projectId}-integration`,
-        this.projectId,
-        this.context
-      )
+    // Create and register all agent implementations
+    const agents = [
+      new ProjectAnalyzerAgent(`${this.projectId}-project-analyzer`, this.projectId, this.context),
+      new TaskDecomposerAgent(`${this.projectId}-task-decomposer`, this.projectId, this.context),
+      new BackendEngineerAgent(`${this.projectId}-backend-engineer`, this.projectId, this.context),
+      new FrontendEngineerAgent(`${this.projectId}-frontend-engineer`, this.projectId, this.context),
+      new FullstackEngineerAgent(`${this.projectId}-fullstack-engineer`, this.projectId, this.context),
+      new DevOpsEngineerAgent(`${this.projectId}-devops-engineer`, this.projectId, this.context),
+      new QAEngineerAgent(`${this.projectId}-qa-engineer`, this.projectId, this.context),
+      new CodeReviewerAgent(`${this.projectId}-code-reviewer`, this.projectId, this.context),
+      new DocumentationWriterAgent(`${this.projectId}-documentation-writer`, this.projectId, this.context)
     ];
 
-    // Initialize and add each agent
+    // Initialize and register each agent
     for (const agent of agents) {
       await agent.initialize();
-      this.graph.addAgent(agent);
+      // Register with the graph by wrapping in AgentNode
+      if (this.graph) {
+        await this.graph.addAgent(agent.role, {
+          name: agent.role,
+          execute: agent.execute.bind(agent),
+          shutdown: agent.shutdown.bind(agent)
+        });
+      }
     }
+
+    this.context.logger.info(`Registered ${agents.length} agents in orchestrator graph`);
   }
 
   /**
@@ -121,350 +99,244 @@ export class OrchestratorAgent extends BaseAgent {
 
     this.graph.on('stateUpdate', (state: Partial<HeliosSwarmState>) => {
       // Emit state updates to project monitoring
-      this.io.to(`/projects:${this.projectId}`).emit('stateUpdate', state);
+      this.context.io.to(`/projects:${this.projectId}`).emit('stateUpdate', state);
       this.projectEmitter.emit('stateUpdate', state);
     });
 
     this.graph.on('agentStart', (data: any) => {
-      this.io.to(`/projects:${this.projectId}`).emit('agentStart', data);
+      this.context.io.to(`/projects:${this.projectId}`).emit('agentStart', data);
       this.projectEmitter.emit('agentStart', data);
     });
 
     this.graph.on('agentComplete', (data: any) => {
-      this.io.to(`/projects:${this.projectId}`).emit('agentComplete', data);
+      this.context.io.to(`/projects:${this.projectId}`).emit('agentComplete', data);
       this.projectEmitter.emit('agentComplete', data);
     });
 
     this.graph.on('error', (error: any) => {
-      this.logger.error('Graph execution error:', error);
-      this.io.to(`/projects:${this.projectId}`).emit('error', error);
+      this.context.logger.error('Graph execution error:', error);
+      this.context.io.to(`/projects:${this.projectId}`).emit('error', error);
       this.projectEmitter.emit('error', error);
     });
   }
 
   /**
-   * Execute the orchestrator - starts the project execution
+   * Main execution method for the orchestrator
    */
-  async execute(state: Partial<HeliosSwarmState>): Promise<Partial<HeliosSwarmState>> {
+  async execute(_state: Partial<HeliosSwarmState>): Promise<Partial<HeliosSwarmState>> {
+    if (!this.graph) {
+      throw new Error('Graph not initialized');
+    }
+
     try {
       this.setStatus(AgentStatus.EXECUTING);
-      
-      // Initialize project in database
-      await this.initializeProject(state);
-      
-      // Create initial state
-      const initialState: HeliosSwarmState = {
-        projectId: this.projectId,
-        projectName: state.projectName || 'Unnamed Project',
-        projectDescription: state.projectDescription || '',
-        active_agent: AgentRole.PRODUCT_MANAGER,
-        messages: [],
-        tasks: [],
-        currentTaskId: null,
-        taskDependencies: new Map(),
-        artifacts: new Map(),
-        agentStates: new Map(),
-        errors: [],
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        completed: false,
-        nextAgent: AgentRole.PRODUCT_MANAGER
-      };
 
-      // Start the graph execution
-      if (!this.graph) {
-        throw new Error('Graph not initialized');
-      }
-
-      // Run the graph asynchronously
-      this.executeGraphAsync(initialState);
-
-      // Return immediate response
-      return {
-        projectId: this.projectId,
-        active_agent: AgentRole.PRODUCT_MANAGER,
-        messages: [{
-          id: uuidv4(),
-          from: AgentRole.ORCHESTRATOR,
-          to: 'all',
-          type: 'event',
-          content: 'Project execution started',
-          timestamp: new Date()
-        }]
-      };
-
-    } catch (error) {
-      this.logger.error('OrchestratorAgent execution error:', error);
-      this.setStatus(AgentStatus.ERROR);
-      throw error;
-    }
-  }
-
-  /**
-   * Execute the graph asynchronously
-   */
-  private async executeGraphAsync(initialState: HeliosSwarmState): Promise<void> {
-    try {
-      if (!this.graph) {
-        throw new Error('Graph not initialized');
-      }
-
-      // Run the graph
-      const finalState = await this.graph.run(initialState);
-      
-      // Update project status
-      await this.updateProjectStatus('completed', finalState);
-      
-      // Emit completion event
-      this.projectEmitter.emit('completed', finalState);
-      this.io.to(`/projects:${this.projectId}`).emit('projectCompleted', {
-        projectId: this.projectId,
-        finalState
-      });
+      // The graph manages its own state internally
+      const result = await this.graph.run();
 
       this.setStatus(AgentStatus.COMPLETED);
-
+      return result;
     } catch (error) {
-      this.logger.error('Graph execution failed:', error);
-      await this.updateProjectStatus('failed', { error: error.message });
-      
-      this.projectEmitter.emit('failed', error);
-      this.io.to(`/projects:${this.projectId}`).emit('projectFailed', {
-        projectId: this.projectId,
-        error: error.message
-      });
-
       this.setStatus(AgentStatus.ERROR);
-    }
-  }
-
-  /**
-   * Initialize project in the database
-   */
-  private async initializeProject(state: Partial<HeliosSwarmState>): Promise<void> {
-    const client = await (this.context.db as Pool).connect();
-    
-    try {
-      await client.query('BEGIN');
-      
-      // Insert or update project
-      await client.query(`
-        INSERT INTO helios.projects (
-          id, name, description, status, created_by, metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (id) DO UPDATE SET
-          name = EXCLUDED.name,
-          description = EXCLUDED.description,
-          status = EXCLUDED.status,
-          updated_at = CURRENT_TIMESTAMP
-      `, [
-        this.projectId,
-        state.projectName || 'Unnamed Project',
-        state.projectDescription || '',
-        'active',
-        this.id,
-        JSON.stringify(state)
-      ]);
-      
-      await client.query('COMMIT');
-      
-    } catch (error) {
-      await client.query('ROLLBACK');
       throw error;
-    } finally {
-      client.release();
     }
   }
 
   /**
-   * Update project status in the database
+   * Execute the project asynchronously
    */
-  private async updateProjectStatus(status: string, metadata?: any): Promise<void> {
-    const client = await (this.context.db as Pool).connect();
-    
-    try {
-      await client.query(`
-        UPDATE helios.projects
-        SET status = $1, 
-            metadata = metadata || $2::jsonb,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = $3
-      `, [status, JSON.stringify(metadata || {}), this.projectId]);
-      
-    } finally {
-      client.release();
+  async executeProject(projectData: any): Promise<void> {
+    if (!this.graph) {
+      throw new Error('Graph not initialized');
     }
+
+    // Start execution in background
+    this.executionTimer = setTimeout(async () => {
+      try {
+        this.context.logger.info(`Starting project execution for ${this.projectId}`);
+        
+        const state: Partial<HeliosSwarmState> = {
+          projectId: this.projectId,
+          projectName: projectData.name,
+          projectDescription: projectData.description,
+          active_agent: AgentRole.PROJECT_ANALYZER,  // Changed from PRODUCT_MANAGER
+          messages: [],
+          tasks: [],
+          currentTaskId: null,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+
+        const result = await this.execute(state);
+        
+        // Emit completion event
+        this.context.io.to(`/projects:${this.projectId}`).emit('projectComplete', {
+          projectId: this.projectId,
+          result
+        });
+        
+      } catch (error) {
+        this.context.logger.error(`Project execution error: ${error instanceof Error ? error.message : String(error)}`);
+        
+        // Emit error event
+        this.context.io.to(`/projects:${this.projectId}`).emit('projectError', {
+          projectId: this.projectId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }, 100); // Small delay to allow response to be sent
   }
 
   /**
-   * Handle messages from other agents or external sources
+   * Validate input for the orchestrator
+   */
+  async validate(input: any): Promise<boolean> {
+    // Validate project data
+    if (!input.projectName || !input.projectDescription) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Handle messages sent to the orchestrator
    */
   async handleMessage(message: AgentMessage): Promise<AgentResponse> {
-    try {
-      switch (message.type) {
-        case 'request':
-          return await this.handleRequest(message);
-        case 'event':
-          return await this.handleEvent(message);
-        default:
-          return {
-            success: false,
-            error: `Unknown message type: ${message.type}`
-          };
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  /**
-   * Handle request messages
-   */
-  private async handleRequest(message: AgentMessage): Promise<AgentResponse> {
-    const { content } = message;
-    
-    switch (content.action) {
-      case 'start':
-        await this.execute(content.state || {});
-        return { success: true, data: { status: 'started' } };
-        
-      case 'pause':
-        return await this.pauseExecution();
-        
-      case 'resume':
-        return await this.resumeExecution();
-        
-      case 'status':
-        return await this.getProjectStatus();
-        
-      case 'addAgent':
-        return await this.addCustomAgent(content.agent);
-        
+    switch (message.type) {
+      case 'request':
+        return this.handleProjectRequest(message);
+      case 'event':
+        return this.handleProjectEvent(message);
       default:
         return {
           success: false,
-          error: `Unknown action: ${content.action}`
+          error: 'Unknown message type'
         };
     }
   }
 
   /**
-   * Handle event messages
+   * Handle project requests
    */
-  private async handleEvent(message: AgentMessage): Promise<AgentResponse> {
-    // Forward events to the project emitter
-    this.projectEmitter.emit(message.content.type, message.content.data);
-    return { success: true };
+  private async handleProjectRequest(message: AgentMessage): Promise<AgentResponse> {
+    const { content } = message;
+    
+    switch (content.action) {
+      case 'start':
+        await this.executeProject(content.data);
+        return {
+          success: true,
+          data: { message: 'Project execution started' }
+        };
+        
+      case 'pause':
+        // TODO: Implement pause logic
+        return {
+          success: true,
+          data: { message: 'Project paused' }
+        };
+        
+      case 'resume':
+        // TODO: Implement resume logic
+        return {
+          success: true,
+          data: { message: 'Project resumed' }
+        };
+        
+      case 'status':
+        return {
+          success: true,
+          data: await this.getProjectStatus()
+        };
+        
+      default:
+        return {
+          success: false,
+          error: 'Unknown action'
+        };
+    }
   }
 
   /**
-   * Pause project execution
+   * Handle project events
    */
-  private async pauseExecution(): Promise<AgentResponse> {
-    if (this.graph) {
-      // Implementation would pause the graph execution
-      await this.updateProjectStatus('paused');
-      return { success: true, data: { status: 'paused' } };
-    }
-    return { success: false, error: 'No active execution' };
-  }
-
-  /**
-   * Resume project execution
-   */
-  private async resumeExecution(): Promise<AgentResponse> {
-    if (this.graph && this.status === AgentStatus.WAITING) {
-      await this.updateProjectStatus('active');
-      // Implementation would resume graph execution
-      return { success: true, data: { status: 'resumed' } };
-    }
-    return { success: false, error: 'No paused execution to resume' };
+  private async handleProjectEvent(message: AgentMessage): Promise<AgentResponse> {
+    // Handle various project events
+    this.projectEmitter.emit('projectEvent', message);
+    
+    return {
+      success: true,
+      data: { message: 'Event processed' }
+    };
   }
 
   /**
    * Get current project status
    */
-  private async getProjectStatus(): Promise<AgentResponse> {
-    const client = await (this.context.db as Pool).connect();
-    
+  private async getProjectStatus(): Promise<any> {
+    if (!this.graph) {
+      return { status: 'not_initialized' };
+    }
+
     try {
-      const result = await client.query(`
-        SELECT p.*, 
-               COUNT(DISTINCT t.id) as total_tasks,
-               COUNT(DISTINCT CASE WHEN t.status = 'completed' THEN t.id END) as completed_tasks,
-               COUNT(DISTINCT a.id) as total_artifacts
-        FROM helios.projects p
-        LEFT JOIN helios.tasks t ON t.project_id = p.id
-        LEFT JOIN helios.artifacts a ON a.project_id = p.id
-        WHERE p.id = $1
-        GROUP BY p.id
-      `, [this.projectId]);
-      
-      if (result.rows.length === 0) {
-        return { success: false, error: 'Project not found' };
-      }
+      const currentState = await this.graph.getState();
       
       return {
-        success: true,
-        data: result.rows[0]
+        projectId: this.projectId,
+        status: this.status,
+        currentAgent: currentState?.active_agent,
+        completedTasks: currentState?.tasks.filter(t => t.status === 'completed').length || 0,
+        totalTasks: currentState?.tasks.length || 0,
+        errors: currentState?.errors || []
       };
-      
-    } finally {
-      client.release();
-    }
-  }
-
-  /**
-   * Add a custom agent to the graph
-   */
-  private async addCustomAgent(agent: IAgent): Promise<AgentResponse> {
-    if (!this.graph) {
-      return { success: false, error: 'Graph not initialized' };
-    }
-    
-    try {
-      await agent.initialize();
-      this.graph.addAgent(agent);
-      return { success: true, data: { agentId: agent.id } };
     } catch (error) {
-      return { success: false, error: error.message };
+      return {
+        projectId: this.projectId,
+        status: this.status,
+        error: error instanceof Error ? error.message : String(error)
+      };
     }
   }
 
   /**
-   * Get project event emitter for external monitoring
+   * Register a custom agent
+   * TODO: Convert IAgent to AgentNode or update graph to accept IAgent
+   */
+  // async registerAgent(agent: IAgent): Promise<void> {
+  //   if (!this.graph) {
+  //     throw new Error('Graph not initialized');
+  //   }
+    
+  //   await agent.initialize();
+  //   await this.graph.addAgent(agent.role, agent);
+  // }
+
+  /**
+   * Get project emitter for external listeners
    */
   getProjectEmitter(): EventEmitter {
     return this.projectEmitter;
   }
 
   /**
-   * Validate input - orchestrator accepts project definitions
-   */
-  async validate(input: any): Promise<boolean> {
-    return !!(input.projectName || input.projectDescription);
-  }
-
-  /**
-   * Shutdown the orchestrator and all agents
+   * Shutdown the orchestrator
    */
   async shutdown(): Promise<void> {
+    // Clear execution timer
     if (this.executionTimer) {
       clearTimeout(this.executionTimer);
+      this.executionTimer = null;
     }
-    
+
+    // Shutdown all agents
     if (this.graph) {
-      // Shutdown all agents in the graph
-      const agents = this.graph.getAgents();
-      for (const agent of agents.values()) {
+      const agents = this.graph.getAllAgents();
+      for (const agent of agents) {
         await agent.shutdown();
       }
     }
-    
-    this.projectEmitter.removeAllListeners();
+
+    // Call parent shutdown
     await super.shutdown();
   }
 }

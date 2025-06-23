@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supabase Schema Setup</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        .step {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 4px solid #3b82f6;
+        }
+        .step h3 {
+            margin-top: 0;
+            color: #3b82f6;
+        }
+        .code-container {
+            position: relative;
+            margin: 20px 0;
+        }
+        textarea {
+            width: 100%;
+            min-height: 400px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: #f8f9fa;
+            resize: vertical;
+        }
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        .copy-btn:hover {
+            background: #2563eb;
+        }
+        .copy-btn.copied {
+            background: #10b981;
+        }
+        .link {
+            color: #3b82f6;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .link:hover {
+            text-decoration: underline;
+        }
+        .warning {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        .success {
+            background: #d1fae5;
+            border: 1px solid #10b981;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Supabase Schema Setup for Helios</h1>
+        <p class="subtitle">Follow these steps to set up your Supabase database schema</p>
+
+        <div class="step">
+            <h3>Step 1: Copy the SQL Schema</h3>
+            <p>Click the button below to copy the entire SQL schema to your clipboard:</p>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copySchema()">Copy SQL Schema</button>
+                <textarea id="schema" readonly></textarea>
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>Step 2: Run in Supabase</h3>
+            <ol>
+                <li>Open your <a href="https://supabase.com/dashboard/project/kaeydovooyaxczctsmas/sql/new" target="_blank" class="link">Supabase SQL Editor</a></li>
+                <li>Paste the copied SQL schema</li>
+                <li>Click "Run" or press Ctrl+Enter</li>
+                <li>Wait for the success message</li>
+            </ol>
+            <div class="warning">
+                <strong>Note:</strong> Make sure you're in the correct project (kaeydovooyaxczctsmas)
+            </div>
+        </div>
+
+        <div class="step">
+            <h3>Step 3: Verify Setup</h3>
+            <p>After running the schema, verify it was created successfully:</p>
+            <ol>
+                <li>Go to <a href="https://supabase.com/dashboard/project/kaeydovooyaxczctsmas/editor" target="_blank" class="link">Table Editor</a></li>
+                <li>Check for these tables:
+                    <ul>
+                        <li>✓ projects</li>
+                        <li>✓ workflows</li>
+                        <li>✓ agents (should have 5 sample records)</li>
+                        <li>✓ agent_logs</li>
+                        <li>✓ agent_metrics</li>
+                    </ul>
+                </li>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>Step 4: Test the Connection</h3>
+            <p>Once the schema is set up, test the connection by running this command:</p>
+            <div class="code-container">
+                <button class="copy-btn" onclick="copyCommand()">Copy Command</button>
+                <textarea readonly style="min-height: 60px;">docker exec helios-backend npx tsx src/scripts/test-supabase.ts</textarea>
+            </div>
+            <div class="success" style="display: none;" id="success-msg">
+                <strong>Success!</strong> Your Supabase schema is ready. You can now use the monitoring features.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Load the schema content
+        fetch('/supabase-schema.sql')
+            .then(response => response.text())
+            .then(content => {
+                document.getElementById('schema').value = content;
+            })
+            .catch(() => {
+                // If fetch fails, load from the file directly
+                document.getElementById('schema').value = `ERROR: Could not load schema file. Please check the supabase-schema.sql file in the project root.`;
+            });
+
+        function copySchema() {
+            const textarea = document.getElementById('schema');
+            textarea.select();
+            document.execCommand('copy');
+            
+            const btn = document.querySelector('.copy-btn');
+            btn.textContent = 'Copied!';
+            btn.classList.add('copied');
+            
+            setTimeout(() => {
+                btn.textContent = 'Copy SQL Schema';
+                btn.classList.remove('copied');
+            }, 2000);
+        }
+
+        function copyCommand() {
+            const textarea = event.target.nextElementSibling;
+            textarea.select();
+            document.execCommand('copy');
+            
+            const btn = event.target;
+            btn.textContent = 'Copied!';
+            btn.classList.add('copied');
+            
+            setTimeout(() => {
+                btn.textContent = 'Copy Command';
+                btn.classList.remove('copied');
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
