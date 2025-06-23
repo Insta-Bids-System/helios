@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  backend-python:
+    container_name: helios-backend-python
+    build:
+      context: ./packages/backend-python
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DEBUG: ${DEBUG:-false}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-helios}
+      POSTGRES_USER: ${POSTGRES_USER:-helios_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-helios_password}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      WORKSPACE_BASE_PATH: /workspaces
+    volumes:
+      - ./packages/backend-python:/app
+      - ./workspaces:/workspaces
+    depends_on:
+      - postgres
+      - redis
+    command: python -m helios.main
+
+  postgres:
+    container_name: helios-postgres
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-helios_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-helios_password}
+      POSTGRES_DB: ${POSTGRES_DB:-helios}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./packages/backend-python/sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  redis:
+    container_name: helios-redis
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+  frontend:
+    container_name: helios-frontend
+    build:
+      context: ./packages/frontend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: http://localhost:3000
+    volumes:
+      - ./packages/frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend-python
+
+volumes:
+  postgres-data:
+  redis-data:
