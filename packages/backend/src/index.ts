@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { logger } from './utils/logger';
 import pool from './config/database';
 import { AgentRegistry, AgentContext, AgentRole } from './agents';
+import { LLMService } from './services/llm';
 import routes from './routes';
 
 // Load environment variables
@@ -24,6 +25,16 @@ const io = new Server(httpServer, {
 // Initialize Agent Registry
 const agentRegistry = new AgentRegistry();
 
+// Initialize LLM Service
+let llmService: LLMService | undefined;
+try {
+  llmService = new LLMService(logger);
+  logger.info('LLM Service initialized successfully');
+} catch (error) {
+  logger.error('Failed to initialize LLM Service:', error);
+  logger.warn('Running without LLM integration - agents will use placeholder responses');
+}
+
 // Create agent context
 const agentContext: AgentContext = {
   db: pool,
@@ -34,7 +45,8 @@ const agentContext: AgentContext = {
     retryDelay: 1000,
     timeout: 30000,
     logLevel: 'info'
-  }
+  },
+  llm: llmService
 };
 
 // Store context and registry on app for access in routes

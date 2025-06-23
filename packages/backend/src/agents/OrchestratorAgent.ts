@@ -9,17 +9,27 @@ import {
   AgentResponse
 } from './types';
 import { OrchestratorGraph } from '../orchestrator';
+
+// Import enhanced implementations if available, otherwise use placeholders
+import {
+  ProjectAnalyzerAgent as PlaceholderProjectAnalyzerAgent,
+  TaskDecomposerAgent as PlaceholderTaskDecomposerAgent,
+  BackendEngineerAgent as PlaceholderBackendEngineerAgent,
+  FrontendEngineerAgent as PlaceholderFrontendEngineerAgent,
+  FullstackEngineerAgent as PlaceholderFullstackEngineerAgent,
+  DevOpsEngineerAgent as PlaceholderDevOpsEngineerAgent,
+  QAEngineerAgent as PlaceholderQAEngineerAgent,
+  CodeReviewerAgent as PlaceholderCodeReviewerAgent,
+  DocumentationWriterAgent as PlaceholderDocumentationWriterAgent
+} from './PlaceholderAgents';
+
 import {
   ProjectAnalyzerAgent,
   TaskDecomposerAgent,
   BackendEngineerAgent,
   FrontendEngineerAgent,
-  FullstackEngineerAgent,
-  DevOpsEngineerAgent,
-  QAEngineerAgent,
-  CodeReviewerAgent,
-  DocumentationWriterAgent
-} from './PlaceholderAgents';
+  QAEngineerAgent
+} from './implementations';
 
 export class OrchestratorAgent extends BaseAgent {
   private graph: OrchestratorGraph | null = null;
@@ -68,11 +78,11 @@ export class OrchestratorAgent extends BaseAgent {
       new TaskDecomposerAgent(`${this.projectId}-task-decomposer`, this.projectId, this.context),
       new BackendEngineerAgent(`${this.projectId}-backend-engineer`, this.projectId, this.context),
       new FrontendEngineerAgent(`${this.projectId}-frontend-engineer`, this.projectId, this.context),
-      new FullstackEngineerAgent(`${this.projectId}-fullstack-engineer`, this.projectId, this.context),
-      new DevOpsEngineerAgent(`${this.projectId}-devops-engineer`, this.projectId, this.context),
+      new PlaceholderFullstackEngineerAgent(`${this.projectId}-fullstack-engineer`, this.projectId, this.context),
+      new PlaceholderDevOpsEngineerAgent(`${this.projectId}-devops-engineer`, this.projectId, this.context),
       new QAEngineerAgent(`${this.projectId}-qa-engineer`, this.projectId, this.context),
-      new CodeReviewerAgent(`${this.projectId}-code-reviewer`, this.projectId, this.context),
-      new DocumentationWriterAgent(`${this.projectId}-documentation-writer`, this.projectId, this.context)
+      new PlaceholderCodeReviewerAgent(`${this.projectId}-code-reviewer`, this.projectId, this.context),
+      new PlaceholderDocumentationWriterAgent(`${this.projectId}-documentation-writer`, this.projectId, this.context)
     ];
 
     // Initialize and register each agent

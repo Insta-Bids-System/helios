@@ -184,6 +184,7 @@ export interface AgentContext {
   io: Socket; // Socket.io instance
   logger: any; // Logger instance
   config: AgentConfig;
+  llm?: any; // LLM service instance (optional for backward compatibility)
 }
 
 /**
